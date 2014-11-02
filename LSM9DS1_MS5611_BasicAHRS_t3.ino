@@ -378,13 +378,14 @@ void setup()
   MS5611PromRead(Pcal);
   Serial.println("PROM data read:");
   Serial.print("C0 = "); Serial.println(Pcal[0]);
-  unsigned char refCRC = Pcal[0] >> 12;
+  unsigned char refCRC = Pcal[7] & 0x0F;
   Serial.print("C1 = "); Serial.println(Pcal[1]);
   Serial.print("C2 = "); Serial.println(Pcal[2]);
   Serial.print("C3 = "); Serial.println(Pcal[3]);
   Serial.print("C4 = "); Serial.println(Pcal[4]);
   Serial.print("C5 = "); Serial.println(Pcal[5]);
   Serial.print("C6 = "); Serial.println(Pcal[6]);
+  Serial.print("C7 = "); Serial.println(Pcal[7]);
   
   nCRC = MS5611checkCRC(Pcal);  //calculate checksum to ensure integrity of MS5611 calibration data
   Serial.print("Checksum = "); Serial.print(nCRC); Serial.print(" , should be "); Serial.println(refCRC);  
@@ -857,7 +858,7 @@ void magcalLSM9DS1(float * dest1)
         void MS5611PromRead(uint16_t * destination)
         {
         uint8_t data[2] = {0,0};
-        for (uint8_t ii = 0; ii < 7; ii++) {
+        for (uint8_t ii = 0; ii <8; ii++) {
           Wire.beginTransmission(MS5611_ADDRESS);  // Initialize the Tx buffer
           Wire.write(0xA0 | ii << 1);              // Put PROM address in Tx buffer
           Wire.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
@@ -879,9 +880,9 @@ void magcalLSM9DS1(float * dest1)
         switch (OSR)
         {
           case ADC_256: delay(1); break;  // delay for conversion to complete
-          case ADC_512: delay(2); break;
-          case ADC_1024: delay(3); break;
-          case ADC_2048: delay(5); break;
+          case ADC_512: delay(3); break;
+          case ADC_1024: delay(4); break;
+          case ADC_2048: delay(6); break;
           case ADC_4096: delay(10); break;
         }
        
@@ -899,25 +900,33 @@ void magcalLSM9DS1(float * dest1)
 
 unsigned char MS5611checkCRC(uint16_t * n_prom)  // calculate checksum from PROM register contents
 {
-  int cnt;
-  unsigned int n_rem = 0;
-  unsigned char n_bit;
-  
-  n_prom[0] = ((n_prom[0]) & 0x0FFF);  // replace CRC byte by 0 for checksum calculation
-  n_prom[7] = 0;
-  for(cnt = 0; cnt < 16; cnt++)
-  {
-    if(cnt%2==1) n_rem ^= (unsigned short) ((n_prom[cnt>>1]) & 0x00FF);
-    else         n_rem ^= (unsigned short)  (n_prom[cnt>>1]>>8);
-    for(n_bit = 8; n_bit > 0; n_bit--)
-    {
-        if(n_rem & 0x8000)    n_rem = (n_rem<<1) ^ 0x3000;
-        else                  n_rem = (n_rem<<1);
-    }
-  }
-  n_rem = ((n_rem>>12) & 0x000F);
-  return (n_rem ^ 0x00);
+int cnt;               // simple counter
+unsigned int n_rem;    // crc reminder
+unsigned int crc_read; // original value of the crc
+unsigned char n_bit;
+n_rem = 0x00;
+crc_read=n_prom[7];    //save read CRC
+n_prom[7]=(0xFF00 & (n_prom[7])); // CRC byte is replaced by 0
+
+for (cnt = 0; cnt < 16; cnt++)    // operation is performed on bytes
+{// choose LSB or MSB
+if (cnt%2==1) n_rem ^= (unsigned short) ((n_prom[cnt>>1]) & 0x00FF);
+else n_rem ^= (unsigned short) (n_prom[cnt>>1]>>8);
+for (n_bit = 8; n_bit > 0; n_bit--)
+{
+if (n_rem & (0x8000)) {
+n_rem = (n_rem << 1) ^ 0x3000; 
+} 
+else
+{
+n_rem = (n_rem << 1);
 }
+}
+}
+n_rem= (0x000F & (n_rem >> 12)); // final 4-bit reminder is CRC code
+n_prom[7]=crc_read; // restore the crc_read to its original place
+return (n_rem ^ 0x0);
+} 
 
 
 // I2C read/write functions for the LSM9DS1and AK8963 sensors

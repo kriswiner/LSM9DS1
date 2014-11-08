@@ -235,7 +235,7 @@ uint8_t Ascale = AFS_2G;     // accel full scale
 uint8_t Aodr = AODR_238Hz;   // accel data sample rate
 uint8_t Abw = ABW_50Hz;      // accel data bandwidth
 uint8_t Mscale = MFS_4G;     // mag full scale
-uint8_t Modr = MODR_20Hz;    // mag data sample rate
+uint8_t Modr = MODR_10Hz;    // mag data sample rate
 uint8_t Mmode = MMode_HighPerformance;  // magnetometer operation mode
 float aRes, gRes, mRes;      // scale resolutions per LSB for the sensors
   
@@ -333,7 +333,7 @@ void setup()
   if (c == 0x68 && d == 0x3D) // WHO_AM_I should always be 0x0E for the accel/gyro and 0x3C for the mag
   {  
     Serial.println("LSM9DS1 is online...");
- 
+
    // get sensor resolutions, only need to do this once
    getAres();
    getGres();
@@ -348,7 +348,10 @@ void setup()
  
   magcalLSM9DS1(magBias);
   Serial.println("mag biases (mG)"); Serial.println(1000.*magBias[0]); Serial.println(1000.*magBias[1]); Serial.println(1000.*magBias[2]);
-  
+   
+   initLSM9DS1(); 
+   Serial.println("LSM9DS1 initialized for active data mode...."); // Initialize device for active mode read of acclerometer, gyroscope, and temperature
+
   /* display.clearDisplay();
      
   display.setCursor(0, 0); display.print("LSM9DS1bias");
@@ -367,10 +370,7 @@ void setup()
   display.display();
   delay(1000); 
  */ 
-  initLSM9DS1(); 
-  Serial.println("LSM9DS1 initialized for active data mode...."); // Initialize device for active mode read of acclerometer, gyroscope, and temperature
-
-  // Reset the MS5611 pressure sensor
+ // Reset the MS5611 pressure sensor
   MS5611Reset();
   delay(100);
   Serial.println("MS5611 pressure sensor reset...");
@@ -445,14 +445,14 @@ void loop()
   
   // Sensors x, y, and z axes of the accelerometer and gyro are aligned. The magnetometer  
   // the magnetometer z-axis (+ up) is aligned with the z-axis (+ up) of accelerometer and gyro, but the magnetometer
-  // x-axis is aligned with the -y axis of the gyro and th magnetometer y axis is aligned with the -x axis of the gyro!
+  // x-axis is aligned with the -y axis of the gyro and the magnetometer y axis is aligned with the -x axis of the gyro!
   // We have to make some allowance for this orientation mismatch in feeding the output to the quaternion filter.
   // For the LSM9DS1, we have chosen a magnetic rotation that keeps the sensor forward along the x-axis just like
   // in the LSM9DS0 sensor. This rotation can be modified to allow any convenient orientation convention.
   // This is ok by aircraft orientation standards!  
   // Pass gyro rate as rad/s
-  MadgwickQuaternionUpdate(ax, ay, az, gx*PI/180.0f, gy*PI/180.0f, gz*PI/180.0f,  -my,  -mx, -mz);
-//  MahonyQuaternionUpdate(ax, ay, az, gx*PI/180.0f, gy*PI/180.0f, gz*PI/180.0f, my, mx, mz);
+  MadgwickQuaternionUpdate(ax, ay, az, gx*PI/180.0f, gy*PI/180.0f, gz*PI/180.0f,  -my,  -mx, mz);
+//  MahonyQuaternionUpdate(ax, ay, az, gx*PI/180.0f, gy*PI/180.0f, gz*PI/180.0f, -my, -mx, mz);
 
     // Serial print and/or display at 0.5 s rate independent of data rates
     delt_t = millis() - count;
@@ -701,7 +701,7 @@ void initLSM9DS1()
    writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG1_G, Godr << 5 | Gscale << 3 | Gbw);
    // configure the accelerometer-specify bandwidth selection with Abw
    writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG6_XL, Aodr << 5 | Ascale << 3 | 0x04 |Abw);
-   // enable block data update, allow auto0increment during multiple byte read
+   // enable block data update, allow auto-increment during multiple byte read
    writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG8, 0x44);
 
    // configure the magnetometer-enable temperature compensation of mag data
@@ -720,13 +720,20 @@ void accelgyrocalLSM9DS1(float * dest1, float * dest2)
   uint8_t data[6] = {0, 0, 0, 0, 0, 0};
   int32_t gyro_bias[3] = {0, 0, 0}, accel_bias[3] = {0, 0, 0};
   uint16_t samples, ii;
+
+   // configure the gyroscope
+   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG1_G, Godr << 5 | Gscale << 3 | Gbw);
+   // configure the accelerometer-specify bandwidth selection with Abw
+   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG6_XL, Aodr << 5 | Ascale << 3 | 0x04 |Abw);
+   // enable block data update, allow auto-increment during multiple byte read
+   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG8, 0x44);
   
   Serial.print("Calibrating gyro...");
  
   // First get gyro bias
   byte c = readByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9);
   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9, c | 0x02);     // Enable gyro FIFO  
-  delay(20);                                                       // Wait for change to take effect
+  delay(50);                                                       // Wait for change to take effect
   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_FIFO_CTRL, 0x20 | 0x1F);  // Enable gyro FIFO stream mode and set watermark at 32 samples
   delay(1000);  // delay 1000 milliseconds to collect FIFO samples
   
@@ -754,7 +761,7 @@ void accelgyrocalLSM9DS1(float * dest1, float * dest2)
   
   c = readByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9);
   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9, c & ~0x02);   //Disable gyro FIFO  
-  delay(20);
+  delay(50);
   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_FIFO_CTRL, 0x00);  // Enable gyro bypass mode
  
    Serial.print("Calibrating accel...");
@@ -762,7 +769,7 @@ void accelgyrocalLSM9DS1(float * dest1, float * dest2)
   // now get the accelerometer bias
   c = readByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9);
   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9, c | 0x02);     // Enable gyro FIFO  
-  delay(20);                                                       // Wait for change to take effect
+  delay(50);                                                       // Wait for change to take effect
   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_FIFO_CTRL, 0x20 | 0x1F);  // Enable gyro FIFO stream mode and set watermark at 32 samples
   delay(1000);  // delay 1000 milliseconds to collect FIFO samples
   
@@ -793,7 +800,7 @@ void accelgyrocalLSM9DS1(float * dest1, float * dest2)
   
   c = readByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9);
   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9, c & ~0x02);   //Disable gyro FIFO  
-  delay(20);
+  delay(50);
   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_FIFO_CTRL, 0x00);  // Enable gyro bypass mode
 }
 
@@ -804,6 +811,13 @@ void magcalLSM9DS1(float * dest1)
   int32_t mag_bias[3] = {0, 0, 0};
   int16_t mag_max[3] = {0, 0, 0}, mag_min[3] = {0, 0, 0};
  
+   // configure the magnetometer-enable temperature compensation of mag data
+   writeByte(LSM9DS1M_ADDRESS, LSM9DS1M_CTRL_REG1_M, 0x80 | Mmode << 5 | Modr << 2); // select x,y-axis mode
+   writeByte(LSM9DS1M_ADDRESS, LSM9DS1M_CTRL_REG2_M, Mscale << 5 ); // select mag full scale
+   writeByte(LSM9DS1M_ADDRESS, LSM9DS1M_CTRL_REG3_M, 0x00 ); // continuous conversion mode
+   writeByte(LSM9DS1M_ADDRESS, LSM9DS1M_CTRL_REG4_M, Mmode << 2 ); // select z-axis mode
+   writeByte(LSM9DS1M_ADDRESS, LSM9DS1M_CTRL_REG5_M, 0x40 ); // select block update mode
+   
   Serial.println("Mag Calibration: Wave device in a figure eight until done!");
   delay(4000);
   

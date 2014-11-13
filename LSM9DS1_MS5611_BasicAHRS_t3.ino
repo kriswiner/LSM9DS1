@@ -342,12 +342,17 @@ void setup()
    Serial.print("gyro sensitivity is "); Serial.print(1./(1000.*gRes)); Serial.println(" LSB/mdps");
    Serial.print("mag sensitivity is "); Serial.print(1./(1000.*mRes)); Serial.println(" LSB/mGauss");
 
-  accelgyrocalLSM9DS1(gyroBias, accelBias); // Calibrate gyro and accelerometers, load biases in bias registers
-  Serial.println("accel biases (mg)"); Serial.println(1000.*accelBias[0]); Serial.println(1000.*accelBias[1]); Serial.println(1000.*accelBias[2]);
-  Serial.println("gyro biases (dps)"); Serial.println(gyroBias[0]); Serial.println(gyroBias[1]); Serial.println(gyroBias[2]);
+   Serial.println("Perform gyro and accel self test");
+   selftestLSM9DS1(); // check function of gyro and accelerometer via self test
+   
+   Serial.println(" Calibrate gyro and accel");
+   accelgyrocalLSM9DS1(gyroBias, accelBias); // Calibrate gyro and accelerometers, load biases in bias registers
+   Serial.println("accel biases (mg)"); Serial.println(1000.*accelBias[0]); Serial.println(1000.*accelBias[1]); Serial.println(1000.*accelBias[2]);
+   Serial.println("gyro biases (dps)"); Serial.println(gyroBias[0]); Serial.println(gyroBias[1]); Serial.println(gyroBias[2]);
  
-  magcalLSM9DS1(magBias);
-  Serial.println("mag biases (mG)"); Serial.println(1000.*magBias[0]); Serial.println(1000.*magBias[1]); Serial.println(1000.*magBias[2]);
+   magcalLSM9DS1(magBias);
+   Serial.println("mag biases (mG)"); Serial.println(1000.*magBias[0]); Serial.println(1000.*magBias[1]); Serial.println(1000.*magBias[2]); 
+   delay(2000); // add delay to see results before serial spew of data
    
    initLSM9DS1(); 
    Serial.println("LSM9DS1 initialized for active data mode...."); // Initialize device for active mode read of acclerometer, gyroscope, and temperature
@@ -697,13 +702,18 @@ int16_t readTempData()
 
 void initLSM9DS1()
 {  
+   // enable the 3-axes of the gyroscope
+   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG4, 0x38);
    // configure the gyroscope
    writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG1_G, Godr << 5 | Gscale << 3 | Gbw);
+   delay(200);
+   // enable the three axes of the accelerometer 
+   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG5_XL, 0x38);
    // configure the accelerometer-specify bandwidth selection with Abw
    writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG6_XL, Aodr << 5 | Ascale << 3 | 0x04 |Abw);
+   delay(200);
    // enable block data update, allow auto-increment during multiple byte read
    writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG8, 0x44);
-
    // configure the magnetometer-enable temperature compensation of mag data
    writeByte(LSM9DS1M_ADDRESS, LSM9DS1M_CTRL_REG1_M, 0x80 | Mmode << 5 | Modr << 2); // select x,y-axis mode
    writeByte(LSM9DS1M_ADDRESS, LSM9DS1M_CTRL_REG2_M, Mscale << 5 ); // select mag full scale
@@ -713,6 +723,37 @@ void initLSM9DS1()
 }
 
 
+void selftestLSM9DS1()
+{
+  float accel_noST[3] = {0., 0., 0.}, accel_ST[3] = {0., 0., 0.};
+  float gyro_noST[3] = {0., 0., 0.}, gyro_ST[3] = {0., 0., 0.};
+
+  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG10,   0x00); // disable self test
+  accelgyrocalLSM9DS1(gyro_noST, accel_noST);
+  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG10,   0x05); // enable gyro/accel self test
+  accelgyrocalLSM9DS1(gyro_ST, accel_ST);
+
+  float gyrodx = (gyro_ST[0] - gyro_noST[0]);
+  float gyrody = (gyro_ST[1] - gyro_noST[1]);
+  float gyrodz = (gyro_ST[2] - gyro_noST[2]);
+
+  Serial.println("Gyro self-test results: ");
+  Serial.print("x-axis = "); Serial.print(gyrodx); Serial.print(" dps"); Serial.println(" should be between 20 and 250 dps");
+  Serial.print("y-axis = "); Serial.print(gyrody); Serial.print(" dps"); Serial.println(" should be between 20 and 250 dps");
+  Serial.print("z-axis = "); Serial.print(gyrodz); Serial.print(" dps"); Serial.println(" should be between 20 and 250 dps");
+
+  float accdx = 1000.*(accel_ST[0] - accel_noST[0]);
+  float accdy = 1000.*(accel_ST[1] - accel_noST[1]);
+  float accdz = 1000.*(accel_ST[2] - accel_noST[2]);
+
+  Serial.println("Accelerometer self-test results: ");
+  Serial.print("x-axis = "); Serial.print(accdx); Serial.print(" mg"); Serial.println(" should be between 60 and 1700 mg");
+  Serial.print("y-axis = "); Serial.print(accdy); Serial.print(" mg"); Serial.println(" should be between 60 and 1700 mg");
+  Serial.print("z-axis = "); Serial.print(accdz); Serial.print(" mg"); Serial.println(" should be between 60 and 1700 mg");
+  
+  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG10,   0x00); // disable self test
+  delay(200);
+}
 // Function which accumulates gyro and accelerometer data after device initialization. It calculates the average
 // of the at-rest readings and then loads the resulting offsets into accelerometer and gyro bias registers.
 void accelgyrocalLSM9DS1(float * dest1, float * dest2)
@@ -721,15 +762,19 @@ void accelgyrocalLSM9DS1(float * dest1, float * dest2)
   int32_t gyro_bias[3] = {0, 0, 0}, accel_bias[3] = {0, 0, 0};
   uint16_t samples, ii;
 
+   // enable the 3-axes of the gyroscope
+   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG4, 0x38);
    // configure the gyroscope
    writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG1_G, Godr << 5 | Gscale << 3 | Gbw);
+   delay(200);
+   // enable the three axes of the accelerometer 
+   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG5_XL, 0x38);
    // configure the accelerometer-specify bandwidth selection with Abw
    writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG6_XL, Aodr << 5 | Ascale << 3 | 0x04 |Abw);
+   delay(200);
    // enable block data update, allow auto-increment during multiple byte read
    writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG8, 0x44);
   
-  Serial.print("Calibrating gyro...");
- 
   // First get gyro bias
   byte c = readByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9);
   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9, c | 0x02);     // Enable gyro FIFO  
@@ -764,18 +809,16 @@ void accelgyrocalLSM9DS1(float * dest1, float * dest2)
   delay(50);
   writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_FIFO_CTRL, 0x00);  // Enable gyro bypass mode
  
-   Serial.print("Calibrating accel...");
- 
   // now get the accelerometer bias
   c = readByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9);
-  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9, c | 0x02);     // Enable gyro FIFO  
+  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9, c | 0x02);     // Enable accel FIFO  
   delay(50);                                                       // Wait for change to take effect
-  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_FIFO_CTRL, 0x20 | 0x1F);  // Enable gyro FIFO stream mode and set watermark at 32 samples
+  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_FIFO_CTRL, 0x20 | 0x1F);  // Enable accel FIFO stream mode and set watermark at 32 samples
   delay(1000);  // delay 1000 milliseconds to collect FIFO samples
   
   samples = (readByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_FIFO_SRC) & 0x2F); // Read number of stored samples
 
-  for(ii = 0; ii < samples ; ii++) {            // Read the gyro data stored in the FIFO
+  for(ii = 0; ii < samples ; ii++) {            // Read the accel data stored in the FIFO
     int16_t accel_temp[3] = {0, 0, 0};
     readBytes(LSM9DS1XG_ADDRESS, LSM9DS1XG_OUT_X_L_XL, 6, &data[0]);
     accel_temp[0] = (int16_t) (((int16_t)data[1] << 8) | data[0]); // Form signed 16-bit integer for each sample in FIFO
@@ -799,9 +842,9 @@ void accelgyrocalLSM9DS1(float * dest1, float * dest2)
   dest2[2] = (float)accel_bias[2]*aRes;
   
   c = readByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9);
-  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9, c & ~0x02);   //Disable gyro FIFO  
+  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_CTRL_REG9, c & ~0x02);   //Disable accel FIFO  
   delay(50);
-  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_FIFO_CTRL, 0x00);  // Enable gyro bypass mode
+  writeByte(LSM9DS1XG_ADDRESS, LSM9DS1XG_FIFO_CTRL, 0x00);  // Enable accel bypass mode
 }
 
 void magcalLSM9DS1(float * dest1) 

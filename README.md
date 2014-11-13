@@ -1,7 +1,7 @@
 LSM9DS1
 =======
 
-https://cloud.githubusercontent.com/assets/6698410/5024295/01c82314-6abd-11e4-8a9f-748d0687ca20.jpg
+![](https://cloud.githubusercontent.com/assets/6698410/5024295/01c82314-6abd-11e4-8a9f-748d0687ca20.jpg)
 
 ST's new smaller, lower-power 9-axis motion sensor
 

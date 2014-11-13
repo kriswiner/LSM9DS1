@@ -9,4 +9,4 @@ The LSM9DS1 is a high-resolution (16-bit) 9-axis motion sensor (accelerometer, g
 
 Breakout boards are for sale at [Tindie.com](https://www.tindie.com/products/onehorse/lsm9ds1-ms5611-breakout-board/).
 
-This is a basic Arduino (Teensiduino) sketch that parametrizes the registers, initializes the sensor configurations, perfroms a self-test, calibrates the sensors, and uses the scaled output to obtain yaw, pitch, roll, and quaternions with open-source Madgwick and Mahony sensor fusion filters.
+This is a basic Arduino (Teensiduino) sketch that parametrizes the registers, initializes the sensor configurations, performs the accel and gyro self-tests, calibrates the sensors, and uses the scaled output to obtain yaw, pitch, roll, and quaternions with open-source Madgwick and Mahony sensor fusion filters.

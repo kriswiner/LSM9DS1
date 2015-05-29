@@ -148,7 +148,7 @@
 // Set initial input parameters
 enum Ascale {  // set of allowable accel full scale settings
   AFS_2G = 0,
-  AFS_NoOp,
+  AFS_16G,
   AFS_4G,
   AFS_8G
 };
@@ -650,9 +650,12 @@ void getAres() {
   switch (Ascale)
   {
  	// Possible accelerometer scales (and their register bit settings) are:
-	// 2 Gs (00), 4 Gs (10), and 8 Gs  (11). 
+	// 2 Gs (00), 16 Gs (01), 4 Gs (10), and 8 Gs  (11). 
     case AFS_2G:
           aRes = 2.0/32768.0;
+          break;
+    case AFS_16G:
+          aRes = 16.0/32768.0;
           break;
     case AFS_4G:
           aRes = 4.0/32768.0;

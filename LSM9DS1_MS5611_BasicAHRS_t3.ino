@@ -655,7 +655,7 @@ void getAres() {
           aRes = 2.0/32768.0;
           break;
     case AFS_16G:
-          aRes = 4.0/32768.0;
+          aRes = 16.0/32768.0;
           break;
     case AFS_4G:
           aRes = 4.0/32768.0;
